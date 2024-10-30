@@ -1,0 +1,69 @@
+#include "xil_types.h" // include tipuri predefinite: u8
+#include "xparameters.h" // include constante ce descriu sistemul
+
+#define XPAR_UARTLITE_0_BASEADDR 0x40600000U
+#define TX_ADDR (XPAR_UARTLITE_0_BASEADDR + 0x04)
+
+#define STATUS_ADDR (XPAR_UARTLITE_0_BASEADDR + 0x08)
+#define RX_ADDR XPAR_UARTLITE_0_BASEADDR
+#define BUFFER_SIZE 5
+
+
+volatile int *wants_to_enter0 = (int*)0x80010000;
+volatile int *wants_to_enter1 = (int*)0x80010004;
+volatile int *turn = (int*)0x80010008;
+
+volatile char *x = (char*)0x80000000; // prima adresa din DDR2
+
+void SendString(char * str) {
+    int i = 0;
+    while (str[i] != '\0') {
+//        while ((*(volatile u32*)(STATUS_ADDR) & (1 << 3)) != 0) {
+//            // asteapta pana cand coada se elibereaza (not full)
+//        }
+        *(volatile u8*)(TX_ADDR) = str[i];
+        i++;
+
+    }
+}
+
+
+int main() {
+	int i, delay_cycles = 0x7FFFFF;
+	int j = 0;
+
+	*wants_to_enter0 = 0;
+	*wants_to_enter1 = 0;
+	*turn = 1;
+
+	while(1) {
+
+		*wants_to_enter0 = 1;
+		while (*wants_to_enter1) {
+			if (*turn != 0) {
+				*wants_to_enter0 = 0;
+
+				while(*turn != 0) {}
+
+				*wants_to_enter0 = 1;
+			}
+		}
+
+		///
+		char s[5];
+		for (j = 0; j < 5; j++) {
+			s[j] = *((char *)x + j);
+		}
+		///
+
+		*turn = 1;
+		*wants_to_enter0 = 0;
+
+		SendString(s);
+
+		for(i = 0; i < delay_cycles; i++) ;
+		delay_cycles = (delay_cycles < 0x6FFFFF) ? 0x7FFFFF :
+		delay_cycles-(delay_cycles%23);
+	}
+	return 0;
+}

@@ -1,0 +1,33 @@
+#include "xparameters.h"
+
+volatile int *flag0 = (int*)0x80010000;
+volatile int *flag1 = (int*)0x80010004;
+volatile int *turn = (int*)0x80010008;
+
+volatile char *x = (char*)0x80000000; // prima adresa din DDR2
+
+int main() {
+	int i;
+	x[0] = '0';
+	x[1] = '0';
+	x[2] = ' ';
+	x[3] = ' ';
+	x[4] = '\0';
+
+	while(1) {
+		*flag1 = 1;
+		*turn = 0;
+		while(*flag0 && *turn == 0) {}
+
+		for(i = 0; i < 2; i++) {
+			if(x[i] == '9') {
+				x[i] = '0';
+			} else {
+				x[i]++;
+			}
+		}
+
+		*flag1 = 0;
+	}
+	return 0;
+}
