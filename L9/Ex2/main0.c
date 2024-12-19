@@ -57,27 +57,30 @@ u32 TimerGetCounter(u32 timerBaseAddr, u32 timerNumber)
 #define SIZE_100KB 0x19000
 #define SIZE 0x10
 
-#define DATA_SIZE 4096
+#define DATA_SIZE SIZE_100KB
 
 int nr = DATA_SIZE >> 2; //
 int idx = XPAR_CPU_ID;
 
 
-
 #define DATA_OFFSET ((DATA_SIZE >> 2) * idx)
-#define BARRIER_OFFSET DATA_SIZE
+#define BARRIER_OFFSET (DATA_SIZE + 10)
 #define SORTED_DATA_OFFSET (DATA_SIZE + DATA_SIZE)
+
+
+
 
 volatile u32* data ;
 volatile u32* barrier ;
 volatile u32* sorted_data;
 
 void Init() {
-	data = (u32 *)(XPAR_MIG7SERIES_0_BASEADDR + DATA_OFFSET);
+	data = (XPAR_MIG7SERIES_0_BASEADDR + DATA_OFFSET);
 	barrier = (u32 *)(XPAR_MIG7SERIES_0_BASEADDR + BARRIER_OFFSET);
 	sorted_data = (u32 *)(XPAR_MIG7SERIES_0_BASEADDR + SORTED_DATA_OFFSET);
 }
 
+#define DATA(i) (*((u32 *)(data + (i))))
 
 void InitDdr2(int size_to_init) {
 
@@ -103,10 +106,11 @@ void InitDdr2(int size_to_init) {
 
 
 
-
 void barrier_sync() {
+	MutexLockBlocking(MUTEX_ADDR, 0, XPAR_CPU_ID);
 	*barrier += 1;
-	while (*barrier < 4) {
+	MutexUnlock(MUTEX_ADDR, 0, XPAR_CPU_ID);
+	while (*barrier < 2) {
 		// wait
 	}
 	*barrier = 0;
@@ -124,7 +128,7 @@ void swap(u32 *a, u32 *b) {
 
 // Function definition of sort array using shell sort
 
-void shellsort(u32 arr[], u32 nums)
+void ShellSort(u32 nums)
 {
     // i -> gap/interval
     for (int i = nums / 2; i > 0; i = i / 2)
@@ -135,40 +139,21 @@ void shellsort(u32 arr[], u32 nums)
         {
             for(int k = j - i; k >= 0; k = k - i)
             {
-            	xil_printf("%u\r\n", k);
-                if (arr[k+i] >= arr[k])
+            	if(DATA(k + i) >= DATA(k))
                 {
                    break;
                 }
                 else
                 {
-                    swap(&arr[k], &arr[k+i]);
+                    swap(DATA(k + i), DATA(k));
                 }
             }
         }
     }
-    return ;
 
 }
 
-void bubblesort(u32 arr[], u32 nums)
-{
-    int swapped;
-    for (u32 i = 0; i < nums - 1; i++) {
-        swapped = 0;
-        for (u32 j = 0; j < nums - i - 1; j++) {
-            if (arr[j] > arr[j + 1]) {
-                swap(&arr[j], &arr[j + 1]);
-                swapped = 1;
-            }
-        }
-
-        if (!swapped) {
-            break;
-        }
-    }
-}
-
+ 
 
 void interclasare(u32 *a, u32 *b, u32 *c, u32 *d, int n) {
 	u32 *r = sorted_data;
@@ -187,47 +172,78 @@ void interclasare(u32 *a, u32 *b, u32 *c, u32 *d, int n) {
 	}
 }
 
-int check(u32 *a, u32 n) {
-
+int check(u32 n) {
 
 	int i;
 	for (i = 1; i < n; i++) {
 		//xil_printf("%u \r\n", a[i]);
-		if (a[i - 1] > a[i]) {
-			return 0;
+		if (DATA(i + 1) > DATA(i)) {
+			return i;
 		}
 	}
-	return 1;
+	return 0;
 }
 
+void PrintArray(u32 *a, int nr) {
+	int i;
+	for (i = 0; i < nr; i++) {
+		xil_printf("a[%d] = %u\r\n", i, a[i]);
+	}
+}
+
+void WriteLog(char s[] ) {
+	MutexLockBlocking(MUTEX_ADDR, 0, XPAR_CPU_ID);
+	xil_printf("P0: %s\r\n", s);
+	MutexUnlock(MUTEX_ADDR, 0, XPAR_CPU_ID);
+}
+void WriteLogWithNumber(char s[], u32 nr) {
+	MutexLockBlocking(MUTEX_ADDR, 0, XPAR_CPU_ID);
+	xil_printf("P0: %s %u\r\n", s, nr);
+	MutexUnlock(MUTEX_ADDR, 0, XPAR_CPU_ID);
+}
 int main() {
-	//*barrier = 0;
 
-	InitDdr2(nr);
+	Init();
 
-	xil_printf("data init completed\r\n");
-	//barrier_sync();
+	*barrier = 0;
 
-	// TimerReset(TimerBaseAddr, 0);
-	// TimerStart(TimerBaseAddr, 0);
-
-	shellsort(data, 1000);
-	xil_printf("data sort completed\r\n");
-//
-//	//barrier_sync();
-//
-//
-
-	if (check(data, 100)) {
-		xil_printf("Datele nu au fost sortate\r\n");
-	} else {
-		xil_printf("Succes !!!\r\n");
+	if (data == NULL) {
+		WriteLog("data nu a fost initializat");
+	    return -1;
 	}
 
-	// TimerStop(TimerBaseAddr, 0);
-	// xil_printf("time = %d\r\n", TimerGetCounter(TimerBaseAddr, 0));
+	InitDdr2(DATA_SIZE);
+	WriteLog("Data init completed");
+
+	barrier_sync();
+	WriteLog("Barrier sync nr. 1");
+
+	TimerReset(TimerBaseAddr, 0);
+	TimerStart(TimerBaseAddr, 0);
+
+	ShellSort(data, nr);
+	WriteLog("Data sort completed");
+
+
+	barrier_sync();
+	WriteLog("Barrier sync nr. 2");
+
+	TimerStop(TimerBaseAddr, 0);
+	WriteLogWithNumber("Time = ", TimerGetCounter(TimerBaseAddr, 0));
+
+
+	int ok = check(nr * 2);
+	if (ok) {
+		WriteLogWithNumber("Datele nu au fost sortate. Idx = ", ok);
+	} else {
+		WriteLog("Succes !!!");
+	}
+
+	//PrintArray(data, 100);
+
+
 	//barrier_sync();
 
-	// PrintHistogram();
+
 	return 0;
 }
