@@ -165,7 +165,7 @@ int main() {
             switch (gpio_7_seg_and) {
             case 0x80: *gpio_7_seg_cat_data_addr = ~0xFF; break;
 
-            case (0x80 >> 1): *gpio_7_seg_cat_data_addr = ~0x16; break; // 2 -> 00010100
+            case (0x80 >> 1): *gpio_7_seg_cat_data_addr = ~0x16; break;
 
             }
 
